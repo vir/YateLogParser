@@ -1,0 +1,16 @@
+body { background-color:whitesmoke; }
+div.logmsg { border:1px solid gray; margin:8px 0; padding: 2px; }
+div.logmsg h2 { float:right; margin:0; padding:0; font-size:12pt; font-weight:bold; }
+div.logmsg .msgbody { background-color:white; }
+pre { margin:0; padding:0; }
+.collapsed .msgbody { display:none; }
+
+.col1 { position:absolute; display:inline; left:4em; }
+.col2 { position:absolute; display:inline; left:30em; }
+
+.generic    { background-color:#FFF; }
+.message    { background-color:#FFC; }
+.sipmessage { background-color:#CFF; }
+
+dd { margin-left:10em; margin-top:-1.2em; }
+
