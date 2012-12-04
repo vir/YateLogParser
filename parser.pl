@@ -2,7 +2,7 @@
 #
 # (c) vir
 #
-# Last modified: 2012-12-03 16:56:13 +0400
+# Last modified: 2012-12-04 10:34:44 +0400
 #
 
 package YateLog::Entry;
@@ -38,9 +38,16 @@ sub to_html
 	my $t = lc ref($self);
 	$t =~ s/.*:://;
 	my @classes = ($t, 'logmsg');
-	unshift @classes, 'collapsed';
-	return qq{<div class="@classes"><h2>$t</h2>\n}
-		. qq{<div class="msghead" onClick="on_click_log_message(this)">}.$self->to_html_head().qq{</div>\n<div class="msgbody">}.$self->to_html_body().qq{</div></div>\n};
+	my $headattrs = '';
+	unshift @classes, 'collapsable' if defined $self->to_html_collapse_body();
+	unshift @classes, 'collapsed' if $self->to_html_collapse_body();
+	$headattrs = ' onClick="on_click_log_message(this)"' if defined $self->to_html_collapse_body();
+	my $r = qq{<div class="@classes">\n};
+	$r .= qq#<h2>$self->{tag}</h2># if $self->{tag};
+	$r .= qq{<div class="msghead"$headattrs>}.$self->to_html_head().qq{</div>\n};
+	$r .= qq{<div class="msgbody">}.$self->to_html_body().qq{</div>} if defined $self->to_html_collapse_body();
+	$r .= qq{</div>\n};
+	return $r;
 }
 
 sub to_html_head
@@ -53,6 +60,11 @@ sub to_html_body
 {
 	my $self = shift;
 	return '<pre>'.Dumper($self).'<pre>';
+}
+
+sub to_html_collapse_body
+{
+	return 1;
 }
 
 sub quote_xml
@@ -99,7 +111,19 @@ sub to_html_head
 	my $r = 'MSG';
 	$r .= qq#<div class="col1">$self->{type}</div>#;
 	$r .= qq#<div class="col2">$self->{name}</div>#;
+	$r .= q#<div class="col3">#.$self->format_time($self->{ts}).q#</div># if $self->{ts};
 	return $r;
+}
+
+sub format_time
+{
+	my $self = shift;
+	my $ts = shift;
+	my $micros = ($ts =~ /^.*?\.(.*)/) ? '0.'.$1 : 0;
+	my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime($ts);
+	$sec += $micros;
+	return sprintf "%4d-%02d-%02d %02d:%02d:%02.4f",
+				 1900+$year, 1+$mon, $mday, $hour, $min, $sec, $micros;
 }
 
 sub to_html_body
@@ -115,7 +139,7 @@ sub to_html_body
 		if(defined($self->{params}{$k}) && length($self->{params}{$k})) {
 			$r .= $self->quote_xml($self->{params}{$k});
 		} else {
-			$r .= qq#<span style="color:blue;">«»</span>#;
+			$r .= qq#<span class="emptyvalue">«»</span>#;
 		}
 		$r .= qq#</dd>#;
 	}
@@ -163,6 +187,18 @@ sub to_html_head
 	return $r;
 }
 
+sub to_html_body
+{
+	my $self = shift;
+	return '<pre>'.$self->quote_xml($self->{text}).'<pre>';
+}
+
+sub to_html_collapse_body
+{
+	my $self = shift;
+	return $self->{text} ? 1 : undef;
+}
+
 package YateLog::Entry::SipMessage;
 use base qw( YateLog::Entry::Generic );
 use Carp;
@@ -199,7 +235,7 @@ sub to_html_head
 sub to_html_body
 {
 	my $self = shift;
-	return '<pre>'.$self->{text}.'<pre>';
+	return '<pre>'.$self->quote_xml($self->{text}).'<pre>';
 }
 
 package main;
@@ -225,8 +261,8 @@ print qq{</body></html>\n};
 sub make_object
 {
 	my($line) = @_;
-	if($line =~ /^(Sniffed|Returned .*?) '([\w\.]+?)'/) {
-		return new YateLog::Entry::Message(type => $1, name => $2);
+	if($line =~ /^(Sniffed|Returned .*?) '([\w\.]+?)'(?: time=([\d\.]+))?(?: delay=([\d\.]+))?/) {
+		return new YateLog::Entry::Message(type => $1, name => $2, ts => $3, delay => $4);
 	} elsif(/^<sip:(.*?)> '(.*?)' received (\d+) bytes SIP message from (\S+)/) {
 		return new YateLog::Entry::SipMessage(level => $1, listener => $2, size => $3, peer => $4, dir => 'recv');
 	} elsif(/^<sip:(.*?)> '(.*?)' sending ('.*?'|code \d+) \w* to (\S+)/) {

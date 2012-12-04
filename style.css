@@ -4,13 +4,16 @@ div.logmsg h2 { float:right; margin:0; padding:0; font-size:12pt; font-weight:bo
 div.logmsg .msgbody { background-color:white; }
 pre { margin:0; padding:0; }
 .collapsed .msgbody { display:none; }
+.collapsable .msghead { cursor:pointer; }
 
 .col1 { position:absolute; display:inline; left:4em; }
-.col2 { position:absolute; display:inline; left:30em; }
+.col2 { position:absolute; display:inline; left:32em; }
+.col3 { position:absolute; display:inline; left:75em; }
 
 .generic    { background-color:#FFF; }
 .message    { background-color:#FFC; }
 .sipmessage { background-color:#CFF; }
 
 dd { margin-left:10em; margin-top:-1.2em; }
+.emptyvalue { font-weight:bold; color:#80A; }
 
