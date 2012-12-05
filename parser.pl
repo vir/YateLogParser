@@ -2,7 +2,7 @@
 #
 # (c) vir
 #
-# Last modified: 2012-12-05 15:14:39 +0400
+# Last modified: 2012-12-05 16:02:19 +0400
 #
 
 package YateLog::Entry;
@@ -296,6 +296,9 @@ sub merge
 	my $self = shift;
 	my($other) = @_;
 	push @{ $self->{messages} }, @{ $other->{messages} };
+	foreach my $n(@{ $other->{numbers} }) {
+		push @{ $self->{numbers} }, $n unless $self->{tmp}{nums}{$n}++;
+	}
 }
 
 sub add_message
@@ -357,7 +360,8 @@ sub run
 			$self->{sum}{tsmax} = $e->{ts};
 		}
 
-		next if $e->{call};
+#		next if $e->{call};
+		next if(($e->{type}||'') =~ /^returned/i);
 
 		my $curtag;
 		if(my $p = $e->{params}) {
@@ -489,56 +493,28 @@ sub find_response
 	my $name = $self->{cur}{log}[$index]{name};
 	$name = $self->{cur}{log}[$index]{params}{message} if $name eq 'chan.masquerade';
 	my $id = $self->{cur}{log}[$index]{params}{id};
+	my $billid = $self->{cur}{log}[$index]{params}{billid};
+	my $rtpid = $self->{cur}{log}[$index]{params}{rtpid};
 	for(;;) {
 		++$index;
 		my $e =  $self->{cur}{log}[$index];
 		return undef unless $e;
 		if($e->{params} && $e->{type} =~ /^returned/i) {
-			return $e if $e->{thread} eq $thread && ($e->{name} eq $name)
-				&& (
-						(!defined($e->{params}{id}) && !defined($id)) || (defined($e->{params}{id}) && defined($id) && $e->{params}{id} eq $id)
-					);
+			return $e if $e->{thread} eq $thread && ($e->{name} eq $name) &&
+				(
+					(defined($e->{params}{id}) && defined($id) && $e->{params}{id} eq $id)
+					|| (!defined($id) &&
+						(
+							(defined($billid) && defined($e->{params}{billid}) && $billid eq $e->{params}{billid})
+							|| (defined($rtpid) && defined($e->{params}{rtpid}) && $rtpid eq $e->{params}{rtpid})
+						)
+					)
+					|| ($name eq 'user.auth' && $self->{cur}{log}[$index]{params}{address} eq $e->{params}{address})
+					|| ($name eq 'user.register' && $self->{cur}{log}[$index]{params}{data} eq $e->{params}{data})
+				);
 		}
 	}
 }
-
-=c
-
-sub tag_by_channel
-{
-	my $self = shift;
-	my($id, $curtag) = @_;
-#warn "tag_by_channel(".($id||'undef').', '.($curtag||'undef')."): ".Dumper($self->{cur}{channels});
-	my $tag = $self->{cur}{channels}{$id};
-	if($tag) {
-		$tag = $self->replace_tag($tag, $curtag) if $curtag && $curtag ne $tag;
-	} elsif($curtag) {
-		$tag = $curtag;
-	} else {
-		$tag = $self->newtag();
-#		$self->{calls}{$tag} = new YateLog::Analizer::Call(tag => $tag);
-	}
-	$self->{cur}{channels}{$id} = $tag;
-	return $tag;
-}
-
-sub replace_tag
-{
-	my $self = shift;
-	my($oldtag, $newtag) = @_;
-
-	foreach my $c(keys %{ $self->{cur}{channels} }) {
-		$self->{cur}{channels}{$c} = $newtag if $self->{cur}{channels}{$c} eq $oldtag;
-	}
-	for(my $i = 0; $i < @{ $self->{cur}{log} }; ++$i) {
-		$self->{cur}{log}[$i]{tag} = $newtag if $oldtag eq ($self->{cur}{log}[$i]{tag}||'');
-	}
-
-	warn "replace_tag($oldtag, $newtag)\n";
-	return $oldtag;
-}
-
-=cut
 
 sub newtag
 {
