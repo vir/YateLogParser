@@ -1,14 +1,15 @@
 body { background-color:whitesmoke; }
 div.logmsg { border:1px solid gray; margin:8px 0; padding: 2px; }
 div.logmsg h2 { float:right; margin:0; padding:0; font-size:12pt; font-weight:bold; }
-div.logmsg .msgbody { background-color:white; }
+div.logmsg .msgbody { background-color:white; overflow-x:auto; }
 pre { margin:0; padding:0; }
 .collapsed .msgbody { display:none; }
 .collapsable .msghead { cursor:pointer; }
 
-.col1 { position:absolute; display:inline; left:4em; }
-.col2 { position:absolute; display:inline; left:32em; }
-.col3 { position:absolute; display:inline; left:75em; }
+.col { position:absolute; display:inline; overflow:hidden; white-space:nowrap; }
+.col1 { left:4em;  width:27.5em; }
+.col2 { left:32em; width:42.5em; }
+.col3 { left:75em; width:20em; }
 
 .generic    { background-color:#FFF; }
 .message    { background-color:#FFC; }
@@ -16,4 +17,16 @@ pre { margin:0; padding:0; }
 
 dd { margin-left:10em; margin-top:-1.2em; }
 .emptyvalue { font-weight:bold; color:#80A; }
+.response { color:#284; }
+.brief { color:#88A; }
+
+.tag { border:1px solid red; background-color:#BBB; }
+.tag_0001 { background-color:#BBF; }
+.tag_0002 { background-color:#BFB; }
+.tag_0003 { background-color:#BFF; }
+.tag_0004 { background-color:#FBB; }
+.tag_0005 { background-color:#FBF; }
+.tag_0006 { background-color:#FFB; }
+.tag_0007 { background-color:#FFF; }
+
 

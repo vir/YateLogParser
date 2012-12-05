@@ -2,17 +2,19 @@
 #
 # (c) vir
 #
-# Last modified: 2012-12-04 10:34:44 +0400
+# Last modified: 2012-12-05 13:07:12 +0400
 #
 
 package YateLog::Entry;
 use utf8;
 use Data::Dumper;
 
+our $id_counter = 'aaaaaa';
+
 sub new
 {
 	my $class = shift;
-	return bless {@_}, $class;
+	return bless {@_, eid => ++$id_counter}, $class;
 }
 
 sub want_more
@@ -43,7 +45,10 @@ sub to_html
 	unshift @classes, 'collapsed' if $self->to_html_collapse_body();
 	$headattrs = ' onClick="on_click_log_message(this)"' if defined $self->to_html_collapse_body();
 	my $r = qq{<div class="@classes">\n};
-	$r .= qq#<h2>$self->{tag}</h2># if $self->{tag};
+	$r .= qq#<a name="$self->{eid}" />#;
+	my $tag = $self->{tag};
+	$tag ||= $self->{call}->tag() if $self->{call};
+	$r .= qq#<h2 class="tag_$tag tag">$tag</h2># if $tag;
 	$r .= qq{<div class="msghead"$headattrs>}.$self->to_html_head().qq{</div>\n};
 	$r .= qq{<div class="msgbody">}.$self->to_html_body().qq{</div>} if defined $self->to_html_collapse_body();
 	$r .= qq{</div>\n};
@@ -93,7 +98,10 @@ sub append_line
 	my $self = shift;
 	croak "Already parsed" unless $self->{_PARSING};
 	local($_) = @_;
-	if(/^  (\w+)=(.*)$/) {
+	if(/^  thread=(0x[0-9a-zA-Z]+)\s+'(.*)'/) {
+		$self->{thread} = $1;
+		$self->{thrname} = $2;
+	} elsif(/^  (\w+)=(.*)$/) {
 		$self->{$1} = $2;
 	} elsif(/^  param\['(.*?)'\] = '(.*)'/) {
 		$self->{params}{$1} = $2;
@@ -109,9 +117,22 @@ sub to_html_head
 {
 	my $self = shift;
 	my $r = 'MSG';
-	$r .= qq#<div class="col1">$self->{type}</div>#;
-	$r .= qq#<div class="col2">$self->{name}</div>#;
-	$r .= q#<div class="col3">#.$self->format_time($self->{ts}).q#</div># if $self->{ts};
+	my $c1 = $self->{type};
+	if(my $resp = $self->{response}) {
+		$c1 .= qq@ <a href="#$resp->{eid}" onclick="event.cancelBubble=true;if (event.stopPropagation) event.stopPropagation();">[↓]</a>@;
+		$c1 .= qq# <span class="response" onClick="return false">(#.$resp->{type};
+		$c1 .= ' '.$resp->{retval} if $resp->{retval};
+		$c1 .= qq#)</span>#;
+	}
+	if(my $reqid = $self->{reqid}) {
+		$c1 .= qq@ <a href="#$reqid" onclick="event.cancelBubble=true;if (event.stopPropagation) event.stopPropagation();">[↑]</a>@;
+	}
+	$r .= qq#<div class="col1 col">$c1</div>#;
+
+	my $c2 = $self->{name};
+	$c2 .= qq# <span class="brief">$self->{brief}</span># if $self->{brief};
+	$r .= qq#<div class="col2 col">$c2</div>#;
+	$r .= q#<div class="col3 col">#.$self->format_time($self->{ts}).q#</div># if $self->{ts};
 	return $r;
 }
 
@@ -130,8 +151,8 @@ sub to_html_body
 {
 	my $self = shift;
 	my $r = '';
-	foreach my $k(qw( thread retval data )) {
-		$r .= "$k: ".$self->quote_xml($self->{$k})."<br />";
+	foreach my $k(qw( thread thrname retval data time delay )) {
+		$r .= "$k: ".$self->quote_xml($self->{$k})."<br />" if defined $self->{$k};
 	}
 	$r .= "<dl>";
 	foreach my $k(@{ $self->{porder} }) {
@@ -144,6 +165,8 @@ sub to_html_body
 		$r .= qq#</dd>#;
 	}
 	$r .= "</dl>";
+	$r .= qq@ Go to <a href="#$self->{response}{eid}">Response ↓</a>@ if $self->{response} && $self->{response}{eid};
+	$r .= qq@ <a href="#$self->{reqid}">Request ↑</a>@ if $self->{reqid};
 	return $r;
 }
 
@@ -182,8 +205,8 @@ sub to_html_head
 {
 	my $self = shift;
 	my $r = $self->{level} || '?';
-	$r .= qq#<div class="col1">$self->{src}</div>#;
-	$r .= qq#<div class="col2">$self->{head}</div>#;
+	$r .= qq#<div class="col1 col">$self->{src}</div>#;
+	$r .= qq#<div class="col2 col">$self->{head}</div>#;
 	return $r;
 }
 
@@ -214,7 +237,7 @@ sub to_html_head
 {
 	my $self = shift;
 	my $r = $self->{level} || '?';
-	$r .= qq#<div class="col1">$self->{listener} <strong>#;
+	$r .= qq#<div class="col1 col">$self->{listener} <strong>#;
 	if($self->{dir} eq 'send') {
 		$r .= '=&gt;';
 	} else {
@@ -222,7 +245,7 @@ sub to_html_head
 	}
 	$r .= qq#</strong> $self->{peer}</div>#;
 
-	$r .= qq#<div class="col2">#;
+	$r .= qq#<div class="col2 col">#;
 	if($self->{text} =~ m/^(.*?)[\r\n]/s) {
 		$r .= $self->quote_xml($1);
 	} else {
@@ -238,6 +261,261 @@ sub to_html_body
 	return '<pre>'.$self->quote_xml($self->{text}).'<pre>';
 }
 
+package YateLog::Analizer::Call;
+
+sub new
+{
+	my $class = shift;
+	return bless { @_ }, $class;
+}
+
+sub tag
+{
+	return shift->{tag};
+}
+
+sub merge
+{
+	my $self = shift;
+	my($other) = @_;
+	push @{ $self->{messages} }, @{ $other->{messages} };
+}
+
+sub add_message
+{
+	my $self = shift;
+	my($e) = @_;
+	push @{ $self->{messages} }, $e->{eid};
+	foreach my $p(qw( caller called )) {
+		my $n = $e->{params}{$p};
+		next unless defined $n;
+		push @{ $self->{numbers} }, $n unless $self->{tmp}{nums}{$n}++;
+	}
+}
+
+package YateLog::Analizer;
+use strict;
+use warnings;
+use Data::Dumper;
+
+our %brief_fields = (
+	'user.auth' => [qw( protocol username domain address )],
+);
+
+sub new
+{
+	my $class = shift;
+	return bless {@_}, $class;
+}
+
+sub run
+{
+	my $self = shift;
+	my($log) = @_;
+	$self->{sum} = { timestamp => time() };
+	my $c = { log => $log, lasttag => '00000' };
+	$self->{cur} = $c;
+	for($c->{index} = 0; $c->{index} < @$log; ++$c->{index}) {
+		my $e = $log->[$c->{index}];
+		++$self->{sum}{count}{ref($e)};
+		if($e->{ts}) {
+			$c->{ts} = $e->{ts};
+			$self->{sum}{tsmin} = $e->{ts} unless $self->{sum}{tsmin};
+			$self->{sum}{tsmax} = $e->{ts};
+		}
+
+		next if $e->{call};
+
+		my $curtag;
+		if(my $p = $e->{params}) {
+			my $call = $self->get_call_for_current_message();
+			$call->add_message($e);
+			$e->{call} = $call if $call;
+			if($e->{response}) {
+				$e->{response}{call} = $call;
+				$e->{response}{reqid} = $e->{eid};
+			}
+
+			if(my $br = $brief_fields{$e->{name}}) {
+				$e->{brief} = '';
+				foreach my $f(@$br) {
+					$e->{brief} .= ' '.substr($f, 0, 1).'='.$p->{$f} if defined $p->{$f};
+				}
+			}
+		} # end message
+	}
+	$self->renumber_calls;
+	delete $self->{cur};
+}
+
+sub renumber_calls
+{
+	my $self = shift;
+	my @keys = sort keys %{ $self->{calls} };
+	my %calls;
+#	my $counter = ('0' x int(1+(log(scalar(@keys))/log(10))));
+	my $counter = 0;
+	foreach my $k(@keys) {
+		my $c = delete $self->{calls}{$k};
+#		my $t = ++$counter;
+		my $t = sprintf "%04d", ++$counter;
+		$c->{tag} = $t;
+		$calls{$t} = $c;
+	}
+	$self->{calls} = \%calls;
+}
+
+sub get_call_for_current_message
+{
+	my $self = shift;
+	my $e = $self->{cur}{log}[$self->{cur}{index}];
+	my $call;
+	if($e->{params} && $e->{type} !~ /^returned/i) {
+		my $response = $self->find_response();
+		if($response) {
+			$call = $self->get_call_for_message($response);
+			$e->{response} = $response;
+		}
+	}
+	return $self->get_call_for_message($e, $call);
+}
+
+sub get_call_for_message
+{
+	my $self = shift;
+	my($e, $call) = @_;
+	my $chans = $self->get_affected_channels($e);
+	foreach my $c(@$chans) {
+		my $old = $self->{cur}{chans}{$c};
+		$call = $self->merge_calls($call, $old) if $old;
+		$self->{cur}{chans}{$c} = $call if $call;
+	}
+	unless($call) {
+		my $tag = $self->newtag;
+		$call = new YateLog::Analizer::Call(tag => $tag);
+		$self->{calls}{$tag} = $call;
+		foreach my $c(@$chans) {
+			$self->{cur}{chans}{$c} = $call;
+		}
+	}
+	return $call;
+}
+
+sub merge_calls
+{
+	my $self = shift;
+	my($c1, $c2) = @_;
+#warn "merge_calls(".($c1||'undef').', '.($c2||'undef').")\n";
+	return $c2 unless $c1;
+	if($c1 != $c2) {
+		$c1->merge($c2);
+		delete $self->{calls}{$c2->{tag}}
+	}
+	foreach my $chan(keys %{ $self->{cur}{chans} }) {
+		$self->{cur}{chans}{$chan} = $c1 if $self->{cur}{chans}{$chan} == $c2;
+	}
+	foreach my $e(@{ $self->{cur}{log} }) {
+		$e->{call} = $c1 if $e->{call} && $e->{call} == $c2;
+	}
+	return $c1;
+}
+
+sub get_affected_channels
+{
+	my $self = shift;
+	my($e) = @_;
+	my @r;
+	my $p = $e->{params};
+	foreach my $param(qw( id targetid peerid lastpeerid )) {
+		push @r, $p->{$param} if $p->{$param};
+	}
+	if($self->{ForkSameCall}) {
+		foreach my $param(qw( fork.master fork.origid newid )) {
+			push @r, $p->{$param} if $p->{$param};
+		}
+	}
+	if(wantarray) { return @r; } else { return \@r; }
+}
+
+sub check_channels
+{
+	my $self = shift;
+	my($entry, $curtag) = @_;
+#warn "check_channels(".Dumper($entry).", ".($curtag||'undef')."\n";
+	foreach my $chan($self->get_affected_channels($entry)) {
+		$curtag = $self->tag_by_channel($chan, $curtag);
+	}
+	return $curtag;
+}
+
+sub find_response
+{
+	my $self = shift;
+	my $index = $self->{cur}{index};
+	my $thread = $self->{cur}{log}[$index]{thread};
+	my $name = $self->{cur}{log}[$index]{name};
+	my $id = $self->{cur}{log}[$index]{params}{id};
+	for(;;) {
+		++$index;
+		my $e =  $self->{cur}{log}[$index];
+		return undef unless $e;
+		if($e->{params} && $e->{type} =~ /^returned/i) {
+			return $e if $e->{thread} eq $thread && $e->{name} eq $name && (
+				(!defined($e->{params}{id}) && !defined($id)) || (defined($e->{params}{id}) && defined($id) && $e->{params}{id} eq $id)
+			);
+		}
+	}
+}
+
+=c
+
+sub tag_by_channel
+{
+	my $self = shift;
+	my($id, $curtag) = @_;
+#warn "tag_by_channel(".($id||'undef').', '.($curtag||'undef')."): ".Dumper($self->{cur}{channels});
+	my $tag = $self->{cur}{channels}{$id};
+	if($tag) {
+		$tag = $self->replace_tag($tag, $curtag) if $curtag && $curtag ne $tag;
+	} elsif($curtag) {
+		$tag = $curtag;
+	} else {
+		$tag = $self->newtag();
+#		$self->{calls}{$tag} = new YateLog::Analizer::Call(tag => $tag);
+	}
+	$self->{cur}{channels}{$id} = $tag;
+	return $tag;
+}
+
+sub replace_tag
+{
+	my $self = shift;
+	my($oldtag, $newtag) = @_;
+
+	foreach my $c(keys %{ $self->{cur}{channels} }) {
+		$self->{cur}{channels}{$c} = $newtag if $self->{cur}{channels}{$c} eq $oldtag;
+	}
+	for(my $i = 0; $i < @{ $self->{cur}{log} }; ++$i) {
+		$self->{cur}{log}[$i]{tag} = $newtag if $oldtag eq ($self->{cur}{log}[$i]{tag}||'');
+	}
+
+	warn "replace_tag($oldtag, $newtag)\n";
+	return $oldtag;
+}
+
+=cut
+
+sub newtag
+{
+	return ++shift->{cur}{lasttag};
+}
+
+sub summary
+{
+	my $self = shift;
+	return Dumper($self);
+}
+
 package main;
 use utf8;
 use strict;
@@ -247,12 +525,16 @@ use Data::Dumper;
 my $log = read_log($ARGV[0]);
 #print Dumper($log);
 
+my $a = new YateLog::Analizer(ForkSameCall => 1);
+$a->run($log);
+
 binmode(STDOUT, ':utf8');
 print qq{<html><head>\n};
 print qq{<meta http-equiv="Content-type" content="text/html;charset=UTF-8">\n};
 print qq{<link rel="stylesheet" type="text/css" href="style.css" />\n};
 print qq{<script type="text/javascript" src="script.js"></script>\n};
 print qq{</head><body>\n};
+print qq#<div id="summary"><pre>#.$a->summary().qq#</pre></div>\n#;
 foreach my $e(@$log) {
 	print $e->to_html if $e;
 }
@@ -278,6 +560,7 @@ sub make_object
 sub need_this_message
 {
 	my($msg) = @_;
+	return 0 unless $msg;
 #	return 0 if( ($msg->{src} || '') =~ /^link1\//);
 	return 1 unless $msg->{name};
 	return 0 if grep { $msg->{name} eq $_ } qw( database call.cdr module.update );
