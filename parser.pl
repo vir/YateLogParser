@@ -2,7 +2,7 @@
 #
 # (c) vir
 #
-# Last modified: 2012-12-05 13:07:12 +0400
+# Last modified: 2012-12-05 15:14:39 +0400
 #
 
 package YateLog::Entry;
@@ -37,12 +37,8 @@ sub debug_print
 sub to_html
 {
 	my $self = shift;
-	my $t = lc ref($self);
-	$t =~ s/.*:://;
-	my @classes = ($t, 'logmsg');
+	my @classes = $self->to_html_classes;
 	my $headattrs = '';
-	unshift @classes, 'collapsable' if defined $self->to_html_collapse_body();
-	unshift @classes, 'collapsed' if $self->to_html_collapse_body();
 	$headattrs = ' onClick="on_click_log_message(this)"' if defined $self->to_html_collapse_body();
 	my $r = qq{<div class="@classes">\n};
 	$r .= qq#<a name="$self->{eid}" />#;
@@ -53,6 +49,17 @@ sub to_html
 	$r .= qq{<div class="msgbody">}.$self->to_html_body().qq{</div>} if defined $self->to_html_collapse_body();
 	$r .= qq{</div>\n};
 	return $r;
+}
+
+sub to_html_classes
+{
+	my $self = shift;
+	my $t = lc ref($self);
+	$t =~ s/.*:://;
+	my @classes = ($t, 'logmsg');
+	unshift @classes, 'collapsable' if defined $self->to_html_collapse_body();
+	unshift @classes, 'collapsed' if $self->to_html_collapse_body();
+	return @classes;
 }
 
 sub to_html_head
@@ -110,6 +117,16 @@ sub append_line
 		delete $self->{_PARSING};
 	} else {
 		warn ref($self).": Can't parse line <<$_>>\n";
+	}
+}
+
+sub to_html_classes
+{
+	my $self = shift;
+	if($self->{type} =~ /^returned/i) {
+		return('msgresponse', $self->SUPER::to_html_classes);
+	} else {
+		return $self->SUPER::to_html_classes;
 	}
 }
 
@@ -299,7 +316,23 @@ use warnings;
 use Data::Dumper;
 
 our %brief_fields = (
-	'user.auth' => [qw( protocol username domain address )],
+	'chan.connected'     => [qw( id peerid )],
+	'chan.startup'       => [qw( id address caller called )],
+	'chan.hangup'        => [qw( id lastpeerid status reason )],
+	'chan.dtmf'          => [qw( id peerid text sequence duplicate )],
+	'chan.masquerade'    => [qw( id message )],
+	'chan.rtp'           => [qw( id rtpid media format remoteip remoteport )],
+	'chan.replaced'      => [qw( id newid peerid )],
+	'chan.disconnected'  => [qw( id targetid )],
+	'call.preroute'      => [qw( id caller called )],
+	'call.route'         => [qw( id caller called context )],
+	'call.execute'       => [qw( id caller called callto )],
+	'call.ringing'       => [qw( id peerid )],
+	'call.progress'      => [qw( id targetid )],
+	'call.update'        => [qw( id peerid )],
+	'call.drop'          => [qw( id reason )],
+	'user.auth'          => [qw( protocol username domain address )],
+	'user.register'      => [qw( username domain )],
 );
 
 sub new
@@ -454,15 +487,17 @@ sub find_response
 	my $index = $self->{cur}{index};
 	my $thread = $self->{cur}{log}[$index]{thread};
 	my $name = $self->{cur}{log}[$index]{name};
+	$name = $self->{cur}{log}[$index]{params}{message} if $name eq 'chan.masquerade';
 	my $id = $self->{cur}{log}[$index]{params}{id};
 	for(;;) {
 		++$index;
 		my $e =  $self->{cur}{log}[$index];
 		return undef unless $e;
 		if($e->{params} && $e->{type} =~ /^returned/i) {
-			return $e if $e->{thread} eq $thread && $e->{name} eq $name && (
-				(!defined($e->{params}{id}) && !defined($id)) || (defined($e->{params}{id}) && defined($id) && $e->{params}{id} eq $id)
-			);
+			return $e if $e->{thread} eq $thread && ($e->{name} eq $name)
+				&& (
+						(!defined($e->{params}{id}) && !defined($id)) || (defined($e->{params}{id}) && defined($id) && $e->{params}{id} eq $id)
+					);
 		}
 	}
 }
@@ -513,7 +548,21 @@ sub newtag
 sub summary
 {
 	my $self = shift;
-	return Dumper($self);
+	my $r = qq#<h1>Yate Log</h1>\n#;
+	$r .= qq@<div>@.localtime($self->{sum}{tsmin}).' &mdash; '.localtime($self->{sum}{tsmax}).qq@</div>\n@;
+	$r .= qq#<h2>Calls</h2><table id="callstable">\n#;
+	foreach my $k(sort keys %{ $self->{calls} }) {
+		my $c = $self->{calls}{$k};
+		next unless @{ $c->{messages} } > 1;
+		my $nums = $c->{numbers} ? join(', ', grep({ length($_) } @{ $c->{numbers} })) : '&mdash;';
+		my $msgs = scalar(@{ $c->{messages} });
+		$msgs .= qq@ <a href="#$c->{messages}[0]">First</a>@;
+		$r .= qq@<tr><td>$k</td><td>$nums</td><td>$msgs</td></tr>\n@;
+	}
+	$r .= qq@</table>\n@;
+
+#	$r .= '<pre>'.Dumper($self).'</pre>';
+	return $r;
 }
 
 package main;
@@ -534,7 +583,7 @@ print qq{<meta http-equiv="Content-type" content="text/html;charset=UTF-8">\n};
 print qq{<link rel="stylesheet" type="text/css" href="style.css" />\n};
 print qq{<script type="text/javascript" src="script.js"></script>\n};
 print qq{</head><body>\n};
-print qq#<div id="summary"><pre>#.$a->summary().qq#</pre></div>\n#;
+print qq#<div id="summary">#.$a->summary().qq#</div>\n#;
 foreach my $e(@$log) {
 	print $e->to_html if $e;
 }

@@ -19,6 +19,7 @@ dd { margin-left:10em; margin-top:-1.2em; }
 .emptyvalue { font-weight:bold; color:#80A; }
 .response { color:#284; }
 .brief { color:#88A; }
+.msgresponse { background-color:#EEB; }
 
 .tag { border:1px solid red; background-color:#BBB; }
 .tag_0001 { background-color:#BBF; }
@@ -29,4 +30,6 @@ dd { margin-left:10em; margin-top:-1.2em; }
 .tag_0006 { background-color:#FFB; }
 .tag_0007 { background-color:#FFF; }
 
+#callstable { border:1px solid black; }
+#callstable td { border:1px solid gray; margin:0; }
 
